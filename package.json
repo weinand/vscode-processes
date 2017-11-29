@@ -33,7 +33,7 @@
                 },
                 {
                     "command": "extension.vscode-processes.startDebug",
-                    "when": "viewItem == node"
+                    "when": "viewItem == 'node'"
                 }
             ]
         },

@@ -15,18 +15,29 @@ import { setInterval } from 'timers';
 
 export const localize = nls.config(process.env.VSCODE_NLS_CONFIG)();
 
+const DEBUG_FLAGS_PATTERN = /\s--(inspect|debug)(-brk)?(=([0-9]+))?/;
+
 export function activate(context: vscode.ExtensionContext) {
 
 	vscode.window.registerTreeDataProvider('extension.vscode-processes.processViewer', new ProcessProvider(context));
 
 	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.startDebug', (item: ProcessTreeItem) => {
-		const config = {
+
+		const config: vscode.DebugConfiguration = {
 			type: 'node',
 			request: 'attach',
-			name: 'attach to process',
-			processId: String(item._process.pid),
-			protocol: 'inspector'
+			name: 'attach to process'
 		};
+
+		const matches = DEBUG_FLAGS_PATTERN.exec(item._process.cmd);
+		if (matches && matches.length >= 2) {
+			if (matches.length === 5 && matches[4]) {
+				config.port = parseInt(matches[4]);
+			}
+			config.protocol= matches[1] === 'debug' ? 'legacy' : 'inspector';
+		} else {	// no port -> try to attach via SIGUSR and pid
+			config.processId = String(item._process.pid);
+		}
 		vscode.debug.startDebugging(undefined, config);
 	}));
 
@@ -61,7 +72,9 @@ class ProcessTreeItem extends TreeItem {
 	constructor(process: ProcessItem) {
 		super(getName(process), getState(process));
 		this._process = process;
-		if (process.name.startsWith('node ')) {
+
+		const matches = DEBUG_FLAGS_PATTERN.exec(process.cmd);
+		if ((matches && matches.length >= 2) || process.name.startsWith('node ')) {
 			this.contextValue = 'node';
 		}
 	}
@@ -93,12 +106,14 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 				const changed = this.merge(this._root._process, process);
 				this._onDidChangeTreeData.fire(undefined);
 			});
-		}, 2000);
+		}, 1000);
 	}
 
 	private merge(old: ProcessItem, process: ProcessItem) {
 
+		old.cmd = process.cmd;
 		old.load = process.load;
+		old.mem = process.mem;
 
 		old.children = old.children || [];
 		process.children = process.children || [];
@@ -114,11 +129,13 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 			}
 		}
 
-		for (const child of old.children) {
-			const found = process.children.find(c => child.pid === c.pid);
-			if (!found && ProcessProvider.KEEP_TERMINATED) {
-				child['deleted'] = true;
-				result.push(child);
+		if (ProcessProvider.KEEP_TERMINATED) {
+			for (const child of old.children) {
+				const found = process.children.find(c => child.pid === c.pid);
+				if (!found) {
+					child['deleted'] = true;
+					result.push(child);
+				}
 			}
 		}
 
