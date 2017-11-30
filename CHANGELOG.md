@@ -1,7 +1,6 @@
-# Change Log
-All notable changes to the "vscode-processes" extension will be documented in this file.
+## 0.0.2
+* The Process View no longer shows by default. Use "Show Process View" action to make it visible.
+* Detect the `--inspect`, `--inspect-brk`, `--debug`, or `--debug-brk` flags (with or without port number)
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
-
-## [Unreleased]
-- Initial release
+## 0.0.1
+* Initial release

@@ -2,7 +2,7 @@
 	"name": "vscode-processes",
 	"displayName": "VS Code Processes",
 	"description": "Provide access to all VS Code processes",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"publisher": "andreweinand",
 	"author": {
 		"name": "Microsoft Corporation",
