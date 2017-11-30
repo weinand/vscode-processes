@@ -1,21 +1,21 @@
 {
-    "name": "vscode-processes",
-    "displayName": "VS Code Processes",
-    "description": "Provide access to all VS Code processes",
-    "version": "0.0.1",
-    "publisher": "andreweinand",
+	"name": "vscode-processes",
+	"displayName": "VS Code Processes",
+	"description": "Provide access to all VS Code processes",
+	"version": "0.0.1",
+	"publisher": "andreweinand",
 	"author": {
 		"name": "Microsoft Corporation",
 		"email": "aweinand@microsoft.com"
 	},
 	"license": "MIT",
-    "engines": {
-        "vscode": "^1.18.0",
-        "node": "^7.9.0"
-    },
-    "categories": [
-        "Debuggers"
-    ],
+	"engines": {
+		"vscode": "^1.18.0",
+		"node": "^7.9.0"
+	},
+	"categories": [
+		"Debuggers"
+	],
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/weinand/vscode-processes.git"
@@ -23,62 +23,67 @@
 	"bugs": {
 		"url": "https://github.com/weinand/vscode-processes/issues"
 	},
-    "dependencies": {
-        "vscode-nls": "2.0.2"
-    },
-    "devDependencies": {
-        "typescript": "^2.6.1",
-        "vscode": "^1.1.6",
-        "@types/node": "^7.0.43",
-        "@types/mocha": "^2.2.42"
-    },
-    "scripts": {
-        "vscode:prepublish": "npm run compile",
-        "compile": "tsc -p ./",
-        "watch": "tsc -watch -p ./",
-        "postinstall": "node ./node_modules/vscode/bin/install",
-        "test": "npm run compile && node ./node_modules/vscode/bin/test"
-    },
-    "activationEvents": [
-        "*"
-    ],
-    "main": "./out/extension",
-    "contributes": {
-        "views": {
-            "explorer": [
-                {
-                    "id": "extension.vscode-processes.processViewer",
-                    "name": "VS Code Processes"
-                }
-            ]
-        },
-        "menus": {
-            "view/item/context": [
-                {
-                    "command": "extension.vscode-processes.kill"
-                },
-                {
-                    "command": "extension.vscode-processes.forceKill"
-                },
-                {
-                    "command": "extension.vscode-processes.startDebug",
-                    "when": "viewItem == 'node'"
-                }
-            ]
-        },
-        "commands": [
-            {
-                "command": "extension.vscode-processes.forceKill",
-                "title": "Force Kill Process"
-            },
-            {
-                "command": "extension.vscode-processes.kill",
-                "title": "Kill Process"
-            },
-            {
-                "command": "extension.vscode-processes.startDebug",
-                "title": "Start Node Debugging"
-            }
-        ]
-    }
+	"dependencies": {
+		"vscode-nls": "2.0.2"
+	},
+	"devDependencies": {
+		"typescript": "^2.6.1",
+		"vscode": "^1.1.6",
+		"@types/node": "^7.0.43",
+		"@types/mocha": "^2.2.42"
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./",
+		"postinstall": "node ./node_modules/vscode/bin/install",
+		"test": "npm run compile && node ./node_modules/vscode/bin/test"
+	},
+	"main": "./out/extension",
+	"activationEvents": [
+		"onCommand:extension.vscode-processes.showProcessView"
+	],
+	"contributes": {
+		"views": {
+			"explorer": [
+				{
+					"id": "extension.vscode-processes.processViewer",
+					"name": "VS Code Processes",
+					"when": "extension.vscode-processes.processViewerContext"
+				}
+			]
+		},
+		"menus": {
+			"view/item/context": [
+				{
+					"command": "extension.vscode-processes.kill"
+				},
+				{
+					"command": "extension.vscode-processes.forceKill"
+				},
+				{
+					"command": "extension.vscode-processes.startDebug",
+					"when": "viewItem == 'node'"
+				}
+			]
+		},
+		"commands": [
+			{
+				"command": "extension.vscode-processes.showProcessView",
+				"title": "Show Process View"
+			},
+			{
+				"command": "extension.vscode-processes.forceKill",
+				"title": "Force Kill Process"
+			},
+			{
+				"command": "extension.vscode-processes.kill",
+				"title": "Kill Process"
+			},
+			{
+				"command": "extension.vscode-processes.startDebug",
+				"title": "Start Node Debugging"
+			}
+		]
+	}
 }
