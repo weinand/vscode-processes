@@ -141,7 +141,7 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 			const CMD = 'ps -ax -o pid=,ppid=,pcpu=,pmem=,command=';
 			const PID_CMD = /^\s*([0-9]+)\s+([0-9]+)\s+([0-9]+\.[0-9]+)\s+([0-9]+\.[0-9]+)\s+(.+)$/;
 
-			exec(CMD, { maxBuffer: 1000 * 1024 }, (err, stdout, stderr) => {
+			const p = exec(CMD, { maxBuffer: 1000 * 1024 }, (err, stdout, stderr) => {
 
 				if (err || stderr) {
 					reject(err || stderr.toString());
@@ -151,7 +151,10 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 					for (const line of lines) {
 						let matches = PID_CMD.exec(line.trim());
 						if (matches && matches.length === 6) {
-							addToTree(parseInt(matches[1]), parseInt(matches[2]), matches[5], parseFloat(matches[3]), parseFloat(matches[4]));
+							const pid = parseInt(matches[1]);
+							//if (pid != p.pid) {
+								addToTree(parseInt(matches[1]), parseInt(matches[2]), matches[5], parseFloat(matches[3]), parseFloat(matches[4]));
+							//}
 						}
 					}
 
