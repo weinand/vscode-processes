@@ -49,9 +49,11 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 						parent.children = [];
 					}
 					parent.children.push(item);
+					/*
 					if (parent.children.length > 1) {
 						parent.children = parent.children.sort((a, b) => a.pid - b.pid);
 					}
+					*/
 				}
 			}
 		}
@@ -61,6 +63,13 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 			const RENDERER_PROCESS_HINT = /--disable-blink-features=Auxclick/;
 			const WINDOWS_WATCHER_HINT = /\\watcher\\win32\\CodeHelper.exe/;
 			const TYPE = /--type=([a-zA-Z-]+)/;
+
+			// remove leading device specifier
+			/*
+			if (cmd.indexOf('\\??\\') === 0) {
+				cmd = cmd.replace('\\??\\', '');
+			}
+			*/
 
 			// find windows file watcher
 			if (WINDOWS_WATCHER_HINT.exec(cmd)) {
@@ -91,7 +100,7 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 			} while (matches);
 
 			if (result) {
-				if (cmd.indexOf('node ') !== 0) {
+				if (cmd.indexOf('node ') < 0 && cmd.indexOf('node.exe') < 0) {
 					return `electron_node ${result}`;
 				}
 			}
@@ -103,8 +112,12 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 			const CMD = 'wmic process get ProcessId,ParentProcessId,CommandLine \n';
 			const CMD_PID = /^(.+)\s+([0-9]+)\s+([0-9]+)$/;
 
+			const VSCODE = /\\Microsoft VS Code( Insiders)?\\Code( - Insiders)?.exe/;
+
 			let stdout = '';
 			let stderr = '';
+
+			rootPid = undefined;	// on Windows "rootPid" seems to be bogus
 
 			const cmd = spawn('cmd');
 
@@ -125,7 +138,15 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 					for (const line of lines) {
 						let matches = CMD_PID.exec(line.trim());
 						if (matches && matches.length === 4) {
-							addToTree(parseInt(matches[3]), parseInt(matches[2]), matches[1].trim(), 0.0, 0.0);
+
+							const cmd = matches[1].trim();
+							const pid = parseInt(matches[3]);
+
+							if (!rootPid && VSCODE.test(cmd)) {
+								rootPid = pid;
+							}
+
+							addToTree(pid, parseInt(matches[2]), cmd, NaN, NaN);
 						}
 					}
 

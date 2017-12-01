@@ -14,8 +14,10 @@ import { setInterval, setTimeout } from 'timers';
 
 export const localize = nls.config(process.env.VSCODE_NLS_CONFIG)();
 
-const DEBUG_FLAGS_PATTERN = /\s--(inspect|debug)(-brk)?(=([0-9]+))?/;
+const POLL_INTERVAL = 2000;
 const KEEP_TERMINATED = false;
+
+const DEBUG_FLAGS_PATTERN = /\s--(inspect|debug)(-brk)?(=([0-9]+))?/;
 
 let processViewer: ProcessProvider;
 
@@ -68,18 +70,26 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {
 }
 
+function name(process: ProcessItem) {
+	if (process['deleted']) {
+		return `[[ ${process.name} ]]`;
+	}
+	return isNaN(process.load) && isNaN(process.mem) ? process.name : `${process.name} (${process.load}, ${process.mem})`;
+}
+
 class ProcessTreeItem extends TreeItem {
 	_process: ProcessItem;
+	_deleted: boolean;
 	_children: ProcessTreeItem[];
 
 	constructor(process: ProcessItem) {
-		super('', vscode.TreeItemCollapsibleState.None);
+		super(name(process), vscode.TreeItemCollapsibleState.None);
 
 		this._process = process;
 
 		// enable node debug action
 		const matches = DEBUG_FLAGS_PATTERN.exec(process.cmd);
-		if ((matches && matches.length >= 2) || process.name.startsWith('node ')) {
+		if ((matches && matches.length >= 2) || process.cmd.indexOf('node ') >= 0 ||process.cmd.indexOf('node.exe') >= 0) {
 			this.contextValue = 'node';
 		}
 	}
@@ -93,7 +103,7 @@ class ProcessTreeItem extends TreeItem {
 
 	merge(process: ProcessItem): ProcessTreeItem | undefined {
 
-		this.label = process['deleted'] ? process.name : `${process.name} (${process.load}, ${process.mem})`;
+		this.label = name(process);
 
 		this._process.pid = process.pid;
 		this._process.ppid = process.ppid;
@@ -118,13 +128,14 @@ class ProcessTreeItem extends TreeItem {
 			for (const child of this._children) {
 				const found = process.children.find(c => child._process.pid === c.pid);
 				if (!found) {
-					child['deleted'] = true;
+					child._deleted = true;
 					result.push(child);
 				}
 			}
 		}
 
-		this._children = result.sort((a, b) => a._process.pid - b._process.pid);
+		//this._children = result.sort((a, b) => a._process.pid - b._process.pid);
+		this._children = result;
 
 		this.collapsibleState = this._children.length > 0 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None;
 
@@ -159,7 +170,7 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 
 			setTimeout(_ => {
 				this.refresh(pid);
-			}, 1000);
+			}, POLL_INTERVAL);
 		}
 		return element.getChildren();
 	}
