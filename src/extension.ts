@@ -108,23 +108,19 @@ class ProcessTreeItem extends TreeItem {
 		this._process.pid = process.pid;
 		this._process.ppid = process.ppid;
 
-		if (!this._children) {
-			this._children = this._process.children ? this._process.children.map(child => new ProcessTreeItem(child)) : [];
-		}
 		process.children = process.children || [];
 
 		const result: ProcessTreeItem[] = [];
 		for (const child of process.children) {
-			const found = this._children.find(c => child.pid === c._process.pid);
-			if (found) {
-				found.merge(child);
-				result.push(found);
-			} else {
-				result.push(new ProcessTreeItem(child));
+			let found = this._children ? this._children.find(c => child.pid === c._process.pid) : undefined;
+			if (!found) {
+				found = new ProcessTreeItem(child);
 			}
+			found.merge(child);
+			result.push(found);
 		}
 
-		if (KEEP_TERMINATED) {
+		if (KEEP_TERMINATED && this._children) {
 			for (const child of this._children) {
 				const found = process.children.find(c => child._process.pid === c.pid);
 				if (!found) {
