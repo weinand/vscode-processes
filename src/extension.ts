@@ -39,7 +39,7 @@ export function activate(context: vscode.ExtensionContext) {
 			name: 'attach'
 		};
 
-		const matches = DEBUG_FLAGS_PATTERN.exec(item._process.cmd);
+		const matches = DEBUG_FLAGS_PATTERN.exec(item._cmd);
 		if (matches && matches.length >= 2) {
 			// attach via port
 			if (matches.length === 5 && matches[4]) {
@@ -48,20 +48,20 @@ export function activate(context: vscode.ExtensionContext) {
 			config.protocol= matches[1] === 'debug' ? 'legacy' : 'inspector';
 		} else {
 			// no port -> try to attach via pid (send SIGUSR1)
-			config.processId = String(item._process.pid);
+			config.processId = String(item._pid);
 		}
 		vscode.debug.startDebugging(undefined, config);
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.kill', (item: ProcessTreeItem) => {
-		if (item._process.pid) {
-			process.kill(item._process.pid, 'SIGTERM');
+		if (item._pid) {
+			process.kill(item._pid, 'SIGTERM');
 		}
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.forceKill', (item: ProcessTreeItem) => {
-		if (item._process.pid) {
-			process.kill(item._process.pid, 'SIGKILL');
+		if (item._pid) {
+			process.kill(item._pid, 'SIGKILL');
 		}
 	}));
 }
@@ -74,67 +74,82 @@ function name(process: ProcessItem) {
 	if (process['deleted']) {
 		return `[[ ${process.name} ]]`;
 	}
-	return isNaN(process.load) && isNaN(process.mem) ? process.name : `${process.name} (${process.load}, ${process.mem})`;
+	return process.load && process.mem ? process.name : `${process.name} (${process.load}, ${process.mem})`;
 }
 
 class ProcessTreeItem extends TreeItem {
-	_process: ProcessItem;
-	_deleted: boolean;
+	_pid: number;
+	_cmd: string;
 	_children: ProcessTreeItem[];
 
-	constructor(process: ProcessItem) {
-		super(name(process), vscode.TreeItemCollapsibleState.None);
-
-		this._process = process;
-
-		// enable node debug action
-		const matches = DEBUG_FLAGS_PATTERN.exec(process.cmd);
-		if ((matches && matches.length >= 2) || process.cmd.indexOf('node ') >= 0 ||process.cmd.indexOf('node.exe') >= 0) {
-			this.contextValue = 'node';
-		}
+	constructor() {
+		super('', vscode.TreeItemCollapsibleState.None);
 	}
 
 	getChildren(): ProcessTreeItem[] {
-		if (!this._children) {
-			this._children = this._process.children ? this._process.children.map(child => new ProcessTreeItem(child)) : [];
-		}
-		return this._children;
+		return this._children || [];
 	}
 
 	merge(process: ProcessItem): ProcessTreeItem | undefined {
 
-		this.label = name(process);
+		let changed = false;
 
-		this._process.pid = process.pid;
-		this._process.ppid = process.ppid;
-
-		process.children = process.children || [];
-
-		const result: ProcessTreeItem[] = [];
-		for (const child of process.children) {
-			let found = this._children ? this._children.find(c => child.pid === c._process.pid) : undefined;
-			if (!found) {
-				found = new ProcessTreeItem(child);
+		// update item's name
+		const oldLabel = this.label;
+		if (process === null) {
+			// terminated
+			if (!this.label.startsWith('[[ ')) {
+				this.label = `[[ ${this.label} ]]`;
 			}
-			found.merge(child);
-			result.push(found);
+		} else {
+			this._pid = process.pid;
+			this._cmd = process.cmd;
+			this.label = process.load && process.mem ? `${process.name} (${process.load}, ${process.mem})` : process.name;
 		}
+		changed = this.label !== oldLabel;
 
-		if (KEEP_TERMINATED && this._children) {
-			for (const child of this._children) {
-				const found = process.children.find(c => child._process.pid === c.pid);
+		// enable item's context (for node debug action)
+		const oldContextValue = this.contextValue;
+		this.contextValue = undefined;
+		if (process) {
+			const matches = DEBUG_FLAGS_PATTERN.exec(process.cmd);
+			if ((matches && matches.length >= 2) || process.cmd.indexOf('node ') >= 0 ||process.cmd.indexOf('node.exe') >= 0) {
+				this.contextValue = 'node';
+			}
+		}
+		changed = changed || this.contextValue !== oldContextValue;
+
+		// update children
+		const nextChildren: ProcessTreeItem[] = [];
+		if (process) {
+			process.children = process.children || [];
+			for (const child of process.children) {
+				let found = this._children ? this._children.find(c => child.pid === c._pid) : undefined;
 				if (!found) {
-					child._deleted = true;
-					result.push(child);
+					found = new ProcessTreeItem();
+					changed = true;
+				}
+				if (found.merge(child)) {
+					changed = true;
+				}
+				nextChildren.push(found);
+			}
+
+			if (KEEP_TERMINATED && this._children) {
+				for (const child of this._children) {
+					const found = process.children.find(c => child._pid === c.pid);
+					if (!found) {
+						child.merge(null);
+						nextChildren.push(child);
+					}
 				}
 			}
 		}
-
-		//this._children = result.sort((a, b) => a._process.pid - b._process.pid);
-		this._children = result;
+		this._children = nextChildren;
 
 		this.collapsibleState = this._children.length > 0 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None;
 
+		//return changed ? this : undefined;
 		return undefined;
 	}
 }
@@ -159,7 +174,7 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 			const pid = parseInt(process.env['VSCODE_PID']);
 
 			if (!this._root) {
-				this._root = new ProcessTreeItem({ name: 'root', pid: 0, ppid: 0, cmd: 'root', load: 0.0, mem: 0.0});
+				this._root = new ProcessTreeItem();
 				this.refresh(pid);
 			}
 			element = this._root;

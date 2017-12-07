@@ -12,8 +12,8 @@ export interface ProcessItem {
 	cmd: string;
 	pid: number;
 	ppid: number;
-	load: number;
-	mem: number;
+	load: string;
+	mem: string;
 
 	children?: ProcessItem[];
 }
@@ -25,7 +25,7 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 		let rootItem: ProcessItem;
 		const map = new Map<number, ProcessItem>();
 
-		function addToTree(pid: number, ppid: number, cmd: string, load: number, mem: number) {
+		function addToTree(pid: number, ppid: number, cmd: string, load: string, mem: string) {
 
 			const parent = map.get(ppid);
 			if (pid === rootPid || parent) {
@@ -49,11 +49,6 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 						parent.children = [];
 					}
 					parent.children.push(item);
-					/*
-					if (parent.children.length > 1) {
-						parent.children = parent.children.sort((a, b) => a.pid - b.pid);
-					}
-					*/
 				}
 			}
 		}
@@ -65,11 +60,22 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 			const TYPE = /--type=([a-zA-Z-]+)/;
 
 			// remove leading device specifier
-			/*
-			if (cmd.indexOf('\\??\\') === 0) {
-				cmd = cmd.replace('\\??\\', '');
-			}
-			*/
+
+			const cleanUNCPrefix = (value: string): string => {
+				if (value.indexOf('\\\\?\\') === 0) {
+					return value.substr(4);
+				} else if (value.indexOf('\\??\\') === 0) {
+					return value.substr(4);
+				} else if (value.indexOf('"\\\\?\\') === 0) {
+					return '"' + value.substr(5);
+				} else if (value.indexOf('"\\??\\') === 0) {
+					return '"' + value.substr(5);
+				} else {
+					return value;
+				}
+			};
+
+			cmd = cleanUNCPrefix(cmd);
 
 			// find windows file watcher
 			if (WINDOWS_WATCHER_HINT.exec(cmd)) {
@@ -83,7 +89,6 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 					if (!RENDERER_PROCESS_HINT.exec(cmd)) {
 						return 'shared-process';
 					}
-
 					return `renderer`;
 				}
 				return matches[1];
@@ -109,46 +114,42 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 
 		if (process.platform === 'win32') {
 
-			const CMD = 'wmic process get ProcessId,ParentProcessId,CommandLine \n';
-			const CMD_PID = /^(.+)\s+([0-9]+)\s+([0-9]+)$/;
+			const CMD = 'wmic process get CommandLine,ParentProcessId,ProcessId,WorkingSetSize && wmic path win32_perfformatteddata_perfproc_process where (PercentProcessorTime ^> 0) get IDProcess,PercentProcessorTime';
+			const CMD_PAT1 = /^(.+)\s+([0-9]+)\s+([0-9]+)\s+([0-9]+)$/;
+			const CMD_PAT2 = /^([0-9]+)\s+([0-9]+)$/;
 
-			let stdout = '';
-			let stderr = '';
-
-			const cmd = spawn('cmd');
-
-			cmd.stdout.on('data', data => {
-				stdout += data.toString();
-			});
-			cmd.stderr.on('data', data => {
-				stderr += data.toString();
-			});
-
-			cmd.on('exit', () => {
-
-				if (stderr.length > 0) {
+			const cmd = exec(CMD, { maxBuffer: 1000 * 1024 }, (err, stdout, stderr) => {
+				
+				if (err || stderr) {
 					reject(stderr);
 				} else {
 
 					const lines = stdout.split('\r\n');
-					for (const line of lines) {
-						let matches = CMD_PID.exec(line.trim());
-						if (matches && matches.length === 4) {
-							addToTree(parseInt(matches[3]), parseInt(matches[2]), matches[1].trim(), NaN, NaN);
+					for (let line of lines) {
+						line = line.trim();
+						let matches = CMD_PAT1.exec(line);
+						if (matches && matches.length === 5) {
+							const mem = parseInt(matches[4])/1024/1024;
+							addToTree(parseInt(matches[3]), parseInt(matches[2]), matches[1].trim(), '0%', mem.toFixed(2)+'MB');
+						} else {
+							matches = CMD_PAT2.exec(line);
+							if (matches && matches.length === 3) {
+								const pid = parseInt(matches[1]);
+								const process = map.get(pid);
+								if (process) {
+									process.load = matches[2] + '%';
+								}
+							}
 						}
 					}
 
 					resolve(rootItem);
 				}
 			});
-
-			cmd.stdin.write(CMD);
-			cmd.stdin.end();
-
 		} else {	// OS X & Linux
 
 			const CMD = 'ps -ax -o pid=,ppid=,pcpu=,pmem=,command=';
-			const PID_CMD = /^\s*([0-9]+)\s+([0-9]+)\s+([0-9]+\.[0-9]+)\s+([0-9]+\.[0-9]+)\s+(.+)$/;
+			const CMD_PAT = /^\s*([0-9]+)\s+([0-9]+)\s+([0-9]+\.[0-9]+)\s+([0-9]+\.[0-9]+)\s+(.+)$/;
 
 			const p = exec(CMD, { maxBuffer: 1000 * 1024 }, (err, stdout, stderr) => {
 
@@ -158,12 +159,9 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 
 					const lines = stdout.toString().split('\n');
 					for (const line of lines) {
-						let matches = PID_CMD.exec(line.trim());
+						let matches = CMD_PAT.exec(line.trim());
 						if (matches && matches.length === 6) {
-							const pid = parseInt(matches[1]);
-							//if (pid != p.pid) {
-								addToTree(parseInt(matches[1]), parseInt(matches[2]), matches[5], parseFloat(matches[3]), parseFloat(matches[4]));
-							//}
+							addToTree(parseInt(matches[1]), parseInt(matches[2]), matches[5], matches[3]+'%', parseFloat(matches[4]).toFixed(2)+'%');
 						}
 					}
 
