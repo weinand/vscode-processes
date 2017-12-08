@@ -70,13 +70,6 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {
 }
 
-function name(process: ProcessItem) {
-	if (process['deleted']) {
-		return `[[ ${process.name} ]]`;
-	}
-	return process.load && process.mem ? process.name : `${process.name} (${process.load}, ${process.mem})`;
-}
-
 class ProcessTreeItem extends TreeItem {
 	_pid: number;
 	_cmd: string;
@@ -150,7 +143,7 @@ class ProcessTreeItem extends TreeItem {
 		this.collapsibleState = this._children.length > 0 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None;
 
 		//return changed ? this : undefined;
-		return undefined;
+		return this;
 	}
 }
 
@@ -173,23 +166,24 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 		if (!element) {
 			const pid = parseInt(process.env['VSCODE_PID']);
 
+			setTimeout(_ => {
+				listProcesses(pid).then(process => {
+					const changed = this._root.merge(process);
+					if (changed) {
+						this._onDidChangeTreeData.fire(undefined);
+					}
+				});
+			}, POLL_INTERVAL);
+
 			if (!this._root) {
 				this._root = new ProcessTreeItem();
-				this.refresh(pid);
+				return listProcesses(pid).then(process => {
+					this._root.merge(process);
+					return this._root.getChildren();
+				});
 			}
 			element = this._root;
-
-			setTimeout(_ => {
-				this.refresh(pid);
-			}, POLL_INTERVAL);
 		}
 		return element.getChildren();
-	}
-
-	private refresh(pid: number) {
-		listProcesses(pid).then(process => {
-			const changed = this._root.merge(process);
-			this._onDidChangeTreeData.fire(changed);
-		});
 	}
 }

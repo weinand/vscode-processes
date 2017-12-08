@@ -6,6 +6,7 @@
 'use strict';
 
 import { spawn, exec } from 'child_process';
+import { totalmem } from 'os';
 
 export interface ProcessItem {
 	name: string;
@@ -119,7 +120,7 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 			const CMD_PAT2 = /^([0-9]+)\s+([0-9]+)$/;
 
 			const cmd = exec(CMD, { maxBuffer: 1000 * 1024 }, (err, stdout, stderr) => {
-				
+
 				if (err || stderr) {
 					reject(stderr);
 				} else {
@@ -151,6 +152,8 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 			const CMD = 'ps -ax -o pid=,ppid=,pcpu=,pmem=,command=';
 			const CMD_PAT = /^\s*([0-9]+)\s+([0-9]+)\s+([0-9]+\.[0-9]+)\s+([0-9]+\.[0-9]+)\s+(.+)$/;
 
+			const TOTAL_MB = totalmem() / 1024 / 1024;
+
 			const p = exec(CMD, { maxBuffer: 1000 * 1024 }, (err, stdout, stderr) => {
 
 				if (err || stderr) {
@@ -161,7 +164,8 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 					for (const line of lines) {
 						let matches = CMD_PAT.exec(line.trim());
 						if (matches && matches.length === 6) {
-							addToTree(parseInt(matches[1]), parseInt(matches[2]), matches[5], matches[3]+'%', parseFloat(matches[4]).toFixed(2)+'%');
+							const mb = TOTAL_MB / 100 * parseFloat(matches[4]);
+							addToTree(parseInt(matches[1]), parseInt(matches[2]), matches[5], matches[3]+'%', mb.toFixed(2)+'MB');
 						}
 					}
 
