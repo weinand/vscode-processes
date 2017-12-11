@@ -2,7 +2,7 @@
 	"name": "vscode-processes",
 	"displayName": "VS Code Processes",
 	"description": "Provide access to all VS Code processes",
-	"version": "0.0.2",
+	"version": "0.0.4",
 	"publisher": "andreweinand",
 	"author": {
 		"name": "Microsoft Corporation",
@@ -30,14 +30,16 @@
 		"typescript": "^2.6.1",
 		"vscode": "^1.1.6",
 		"@types/node": "^7.0.43",
-		"@types/mocha": "^2.2.42"
+		"@types/mocha": "^2.2.42",
+		"vsce": "^1.35.0"
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
 		"watch": "tsc -watch -p ./",
 		"postinstall": "node ./node_modules/vscode/bin/install",
-		"test": "npm run compile && node ./node_modules/vscode/bin/test"
+		"test": "npm run compile && node ./node_modules/vscode/bin/test",
+		"package": "vsce package"
 	},
 	"main": "./out/extension",
 	"activationEvents": [
