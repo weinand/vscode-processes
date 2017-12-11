@@ -17,7 +17,8 @@ export const localize = nls.config(process.env.VSCODE_NLS_CONFIG)();
 const POLL_INTERVAL = 2000;
 const KEEP_TERMINATED = false;
 
-const DEBUG_FLAGS_PATTERN = /\s--(inspect|debug)(-brk)?(=([0-9]+))?/;
+const DEBUG_FLAGS_PATTERN = /\s--(inspect|debug)(-(brk|port))?(=\d+)?/;
+const DEBUG_PORT_PATTERN = /\s--(inspect|debug)-port=(\d+)/;
 
 let processViewer: ProcessProvider;
 
@@ -32,25 +33,13 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.startDebug', (item: ProcessTreeItem) => {
+		attachTo(item);
+	}));
 
-		const config: vscode.DebugConfiguration = {
-			type: 'node',
-			request: 'attach',
-			name: 'attach'
-		};
-
-		const matches = DEBUG_FLAGS_PATTERN.exec(item._cmd);
-		if (matches && matches.length >= 2) {
-			// attach via port
-			if (matches.length === 5 && matches[4]) {
-				config.port = parseInt(matches[4]);
-			}
-			config.protocol= matches[1] === 'debug' ? 'legacy' : 'inspector';
-		} else {
-			// no port -> try to attach via pid (send SIGUSR1)
-			config.processId = String(item._pid);
+	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.startClusterDebug', (item: ProcessTreeItem) => {
+		for (let child of item._children) {
+			attachTo(child);
 		}
-		vscode.debug.startDebugging(undefined, config);
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.kill', (item: ProcessTreeItem) => {
@@ -68,6 +57,36 @@ export function activate(context: vscode.ExtensionContext) {
 
 // this method is called when your extension is deactivated
 export function deactivate() {
+}
+
+function attachTo(item: ProcessTreeItem) {
+
+	const config: vscode.DebugConfiguration = {
+		type: 'node',
+		request: 'attach',
+		name: `process ${item._pid}`
+	};
+
+	let matches = DEBUG_FLAGS_PATTERN.exec(item._cmd);
+	if (matches && matches.length >= 2) {
+		// attach via port
+		if (matches.length === 5 && matches[4]) {
+			config.port = parseInt(matches[4]);
+		}
+		config.protocol= matches[1] === 'debug' ? 'legacy' : 'inspector';
+	} else {
+		// no port -> try to attach via pid (send SIGUSR1)
+		config.processId = String(item._pid);
+	}
+	
+	// a debug-port=n or inspect-port=n overrides the port
+	matches = DEBUG_PORT_PATTERN.exec(item._cmd);
+	if (matches && matches.length === 3) {
+		// override port
+		config.port = parseInt(matches[2]);
+	}
+
+	vscode.debug.startDebugging(undefined, config);
 }
 
 class ProcessTreeItem extends TreeItem {

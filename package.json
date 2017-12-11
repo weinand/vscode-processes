@@ -66,6 +66,10 @@
 				{
 					"command": "extension.vscode-processes.startDebug",
 					"when": "viewItem == 'node'"
+				},
+				{
+					"command": "extension.vscode-processes.startClusterDebug",
+					"when": "viewItem == 'node'"
 				}
 			]
 		},
@@ -85,6 +89,10 @@
 			{
 				"command": "extension.vscode-processes.startDebug",
 				"title": "Start Node Debugging"
+			},
+			{
+				"command": "extension.vscode-processes.startClusterDebug",
+				"title": "Debug Cluster"
 			}
 		]
 	}
