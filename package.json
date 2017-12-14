@@ -68,8 +68,16 @@
 					"when": "viewItem == 'node'"
 				},
 				{
-					"command": "extension.vscode-processes.startClusterDebug",
-					"when": "viewItem == 'node'"
+					"command": "extension.vscode-processes.startDebug",
+					"when": "viewItem == 'node-subs'"
+				},
+				{
+					"command": "extension.vscode-processes.startDebugAll",
+					"when": "viewItem == 'subs'"
+				},
+				{
+					"command": "extension.vscode-processes.startDebugAll",
+					"when": "viewItem == 'node-subs'"
 				}
 			]
 		},
@@ -88,11 +96,11 @@
 			},
 			{
 				"command": "extension.vscode-processes.startDebug",
-				"title": "Start Node Debugging"
+				"title": "Debug Process"
 			},
 			{
-				"command": "extension.vscode-processes.startClusterDebug",
-				"title": "Debug Cluster"
+				"command": "extension.vscode-processes.startDebugAll",
+				"title": "Debug Sub Processes"
 			}
 		]
 	}

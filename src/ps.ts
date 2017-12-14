@@ -165,7 +165,10 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 						let matches = CMD_PAT.exec(line.trim());
 						if (matches && matches.length === 6) {
 							const mb = TOTAL_MB / 100 * parseFloat(matches[4]);
-							addToTree(parseInt(matches[1]), parseInt(matches[2]), matches[5], matches[3]+'%', mb.toFixed(2)+'MB');
+							const pid = parseInt(matches[1]);
+							//if (pid !== p.pid) {
+								addToTree(pid, parseInt(matches[2]), matches[5], matches[3]+'%', mb.toFixed(2)+'MB');
+							//}
 						}
 					}
 
