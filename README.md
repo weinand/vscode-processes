@@ -6,6 +6,19 @@ The VS Code Processes extensions shows all child processes of VS Code in a custo
 
 From the context menu of a process node you can terminate the process or attach a debugger to it.
 
+## Installing VS Code Processes
+
+This extension is still a prototype and so it is not yet available on the Marketplace but you can easily build the vsix with these commands:
+
+```
+  git clone https://github.com/weinand/vscode-processes
+  cd vscode-processes
+  npm install
+  npm run package
+```
+
+Then use VS Code's **Install from VSIX...** command to install the extension.
+
 ## Using VS Code Processes
 
 By default the Process View is not shown. To open it use the "Show Process View" command.
