@@ -102,6 +102,10 @@ class ProcessTreeItem extends TreeItem {
 		return this._children || [];
 	}
 
+	get id(): string {
+		return this._pid.toString();
+	}
+
 	/*
 	 * Update this item with the information from the given ProcessItem.
 	 * Returns the elementId of the subtree that needs to be refreshed or undefined if nothing has changed.
