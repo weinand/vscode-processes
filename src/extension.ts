@@ -22,8 +22,6 @@ const DEBUG_PORT_PATTERN = /\s--(inspect|debug)-port=(\d+)/;
 
 let processViewer: ProcessProvider;
 
-type ElementId = string;
-
 export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.showProcessView', () => {
@@ -34,26 +32,21 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.commands.executeCommand('setContext', 'extension.vscode-processes.processViewerContext', true)
 	}));
 
-	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.startDebug', (elementId: ElementId) => {
-		attachTo(ProcessTreeItem.find(elementId));
-	}));
+	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.startDebug', (item: ProcessTreeItem) => attachTo(item)));
 
-	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.startDebugAll', (elementId: ElementId) => {
-		const item = ProcessTreeItem.find(elementId);
+	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.startDebugAll', (item: ProcessTreeItem) => {
 		for (let child of item._children) {
 			attachTo(child);
 		}
 	}));
 
-	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.kill', (elementId: ElementId) => {
-		const item = ProcessTreeItem.find(elementId);
+	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.kill', (item: ProcessTreeItem) => {
 		if (item._pid) {
 			process.kill(item._pid, 'SIGTERM');
 		}
 	}));
 
-	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.forceKill', (elementId: ElementId) => {
-		const item = ProcessTreeItem.find(elementId);
+	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.forceKill', (item: ProcessTreeItem) => {
 		if (item._pid) {
 			process.kill(item._pid, 'SIGKILL');
 		}
@@ -78,7 +71,7 @@ function attachTo(item: ProcessTreeItem) {
 		if (matches.length === 5 && matches[4]) {
 			config.port = parseInt(matches[4]);
 		}
-		config.protocol= matches[1] === 'debug' ? 'legacy' : 'inspector';
+		config.protocol = matches[1] === 'debug' ? 'legacy' : 'inspector';
 	} else {
 		// no port -> try to attach via pid (send SIGUSR1)
 		config.processId = String(item._pid);
@@ -96,35 +89,28 @@ function attachTo(item: ProcessTreeItem) {
 
 class ProcessTreeItem extends TreeItem {
 
-	static _map = new Map<string, ProcessTreeItem>();
-
 	_pid: number;
 	_cmd: string;
 	_children: ProcessTreeItem[];
 
-	static find(id: ElementId): ProcessTreeItem {
-		return ProcessTreeItem._map.get(id);
-	}
-
 	constructor(pid: number) {
 		super('', vscode.TreeItemCollapsibleState.None);
 		this._pid = pid;
-		ProcessTreeItem._map.set(pid.toString(), this);
 	}
 
-	getId(): ElementId {
+	getChildren(): ProcessTreeItem[] {
+		return this._children || [];
+	}
+
+	get id(): string {
 		return this._pid.toString();
-	}
-
-	getChildIds(): ElementId[] {
-		return (this._children || []).map(x => x.getId());
 	}
 
 	/*
 	 * Update this item with the information from the given ProcessItem.
 	 * Returns the elementId of the subtree that needs to be refreshed or undefined if nothing has changed.
 	 */
-	merge(process: ProcessItem): ElementId | undefined {
+	merge(process: ProcessItem): ProcessTreeItem {
 
 		// update item's name
 		const oldLabel = this.label;
@@ -145,7 +131,7 @@ class ProcessTreeItem extends TreeItem {
 		changed = changed || this.contextValue !== oldContextValue;
 
 		// update children
-		const childChanges: ElementId[] = [];
+		const childChanges: ProcessTreeItem[] = [];
 		const nextChildren: ProcessTreeItem[] = [];
 		if (process) {
 			process.children = process.children || [];
@@ -187,7 +173,7 @@ class ProcessTreeItem extends TreeItem {
 
 		// attribute changes or changes in more than one child
 		if (changed || childChanges.length > 1) {
-			return this.getId();
+			return this;
 		}
 
 		// changes only in one child -> propagate that child for refresh
@@ -239,39 +225,36 @@ class ProcessTreeItem extends TreeItem {
 	}
 }
 
-export class ProcessProvider implements TreeDataProvider<ElementId> {
+export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 
 	private _root: ProcessTreeItem;
 
-	private _onDidChangeTreeData: EventEmitter<ElementId> = new EventEmitter<ElementId>();
-	readonly onDidChangeTreeData: Event<ElementId> = this._onDidChangeTreeData.event;
+	private _onDidChangeTreeData: EventEmitter<ProcessTreeItem> = new EventEmitter<ProcessTreeItem>();
+	readonly onDidChangeTreeData: Event<ProcessTreeItem> = this._onDidChangeTreeData.event;
 
 	constructor(context: vscode.ExtensionContext) {
 		// everything is lazy
 	}
 
-	getTreeItem(elementId: ElementId): ProcessTreeItem | Thenable<ProcessTreeItem> {
-		return ProcessTreeItem.find(elementId);
+	getTreeItem(processTreeItem: ProcessTreeItem): ProcessTreeItem | Thenable<ProcessTreeItem> {
+		return processTreeItem;
 	}
 
-	getChildren(elementId?: ElementId): vscode.ProviderResult<ElementId[]> {
+	getChildren(element?: ProcessTreeItem): vscode.ProviderResult<ProcessTreeItem[]> {
 
-		let element: ProcessTreeItem;
-		if (elementId) {
-			element = ProcessTreeItem.find(elementId);
-		} else {
+		if (!element) {
 			if (!this._root) {
 				const pid = parseInt(process.env['VSCODE_PID']);
 
 				setInterval(_ => {
 					listProcesses(pid).then(process => {
-						let changedId = this._root.merge(process);
-						if (changedId) {
+						let processTreeItem = this._root.merge(process);
+						if (processTreeItem) {
 							// workaround for https://github.com/Microsoft/vscode/issues/40185
-							if (changedId === this._root.getId()) {
-								changedId = undefined;
+							if (processTreeItem === this._root) {
+								processTreeItem = undefined;
 							}
-							this._onDidChangeTreeData.fire(changedId);
+							this._onDidChangeTreeData.fire(processTreeItem);
 						}
 					});
 				}, POLL_INTERVAL);
@@ -279,11 +262,11 @@ export class ProcessProvider implements TreeDataProvider<ElementId> {
 				this._root = new ProcessTreeItem(pid);
 				return listProcesses(pid).then(process => {
 					this._root.merge(process);
-					return this._root.getChildIds();
+					return this._root.getChildren();
 				});
 			}
 			element = this._root;
 		}
-		return element.getChildIds();
+		return element.getChildren();
 	}
 }
