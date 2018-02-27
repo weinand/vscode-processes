@@ -114,6 +114,7 @@ class ProcessTreeItem extends TreeItem {
 
 		// update item's name
 		const oldLabel = this.label;
+		const oldTooltip = this.tooltip;
 		if (process === null) {
 			// terminated
 			if (!this.label.startsWith('[[ ')) {
@@ -121,9 +122,10 @@ class ProcessTreeItem extends TreeItem {
 			}
 		} else {
 			this._cmd = process.cmd;
+			this.tooltip = process.cmd;
 			this.label = process.load && process.mem ? `${process.name} (${process.load}, ${process.mem})` : process.name;
 		}
-		let changed = this.label !== oldLabel;
+		let changed = this.label !== oldLabel || this.tooltip !== oldTooltip;
 
 		// enable item's context (for debug actions)
 		const oldContextValue = this.contextValue;
