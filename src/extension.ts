@@ -12,7 +12,7 @@ import { listProcesses, ProcessItem } from './ps';
 import { TreeDataProvider, TreeItem, EventEmitter, Event, ProviderResult } from 'vscode';
 import { setInterval, setTimeout } from 'timers';
 
-export const localize = nls.config(process.env.VSCODE_NLS_CONFIG)();
+const localize = nls.loadMessageBundle();
 
 const POLL_INTERVAL = 2000;
 const KEEP_TERMINATED = false;

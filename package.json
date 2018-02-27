@@ -24,14 +24,14 @@
 		"url": "https://github.com/weinand/vscode-processes/issues"
 	},
 	"dependencies": {
-		"vscode-nls": "2.0.2"
+		"vscode-nls": "3.2.1"
 	},
 	"devDependencies": {
-		"typescript": "^2.6.1",
-		"vscode": "^1.1.6",
-		"@types/node": "^7.0.43",
-		"@types/mocha": "^2.2.42",
-		"vsce": "^1.35.0"
+		"typescript": "^2.7.2",
+		"vscode": "^1.1.10",
+		"@types/node": "^9.4.6",
+		"@types/mocha": "^2.2.48",
+		"vsce": "^1.37.1"
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
