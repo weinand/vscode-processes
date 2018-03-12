@@ -20,7 +20,7 @@ export interface ProcessItem {
 	children?: ProcessItem[];
 }
 
-export function listProcesses(rootPid: number): Promise<{ root: ProcessItem, duration: number }> {
+export function listProcesses(rootPid: number, withLoad: boolean): Promise<ProcessItem> {
 
 	return new Promise((resolve, reject) => {
 
@@ -146,8 +146,6 @@ export function listProcesses(rootPid: number): Promise<{ root: ProcessItem, dur
 			}
 		}
 
-		const starttime = Date.now();
-
 		let proc: ChildProcess;
 
 		if (process.platform === 'win32') {
@@ -155,9 +153,13 @@ export function listProcesses(rootPid: number): Promise<{ root: ProcessItem, dur
 			const CMD_PAT1 = /^(.+)\s+([0-9]+)\s+([0-9]+)\s+([0-9]+)$/;
 			const CMD_PAT2 = /^([0-9]+)\s+([0-9]+)$/;
 
-			const CMD = 'wmic process get CommandLine,ParentProcessId,ProcessId,WorkingSetSize && wmic path win32_perfformatteddata_perfproc_process where (PercentProcessorTime ^> 0) get IDProcess,PercentProcessorTime';
+			if (withLoad) {
+				const CMD = 'wmic process get CommandLine,ParentProcessId,ProcessId,WorkingSetSize && wmic path win32_perfformatteddata_perfproc_process where (PercentProcessorTime ^> 0) get IDProcess,PercentProcessorTime';
+				proc = spawn('cmd', [ '/c',  CMD ]);
 
-			proc = spawn(CMD, undefined, { shell: true } );
+			} else {
+				proc = spawn('wmic', [ 'process', 'get', 'CommandLine,ParentProcessId,ProcessId,WorkingSetSize' ]);
+			}
 
 			proc.stdout.setEncoding('utf8');
 			proc.stdout.on('data', lines(line => {
@@ -165,7 +167,7 @@ export function listProcesses(rootPid: number): Promise<{ root: ProcessItem, dur
 				let matches = CMD_PAT1.exec(line);
 				if (matches && matches.length === 5) {
 					const mem = parseInt(matches[4])/1024/1024;
-					addToTree(parseInt(matches[3]), parseInt(matches[2]), matches[1].trim(), '0%', mem.toFixed(2)+'MB');
+					addToTree(parseInt(matches[3]), parseInt(matches[2]), matches[1].trim(), undefined, mem.toFixed(2)+'MB');
 				} else {
 					matches = CMD_PAT2.exec(line);
 					if (matches && matches.length === 3) {
@@ -209,7 +211,7 @@ export function listProcesses(rootPid: number): Promise<{ root: ProcessItem, dur
 		});
 
 		proc.on('close', (n) => {
-			resolve({ root: rootItem, duration: Date.now() - starttime });
+			resolve(rootItem);
 		});
 
 		proc.on('exit', (code, signal) => {

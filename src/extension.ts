@@ -100,6 +100,7 @@ class ProcessTreeItem extends TreeItem {
 	_pid: number;
 	_cmd: string;
 	_children: ProcessTreeItem[];
+	_load: string;
 
 	constructor(parent: ProcessTreeItem, pid: number) {
 		super('', vscode.TreeItemCollapsibleState.None);
@@ -139,7 +140,17 @@ class ProcessTreeItem extends TreeItem {
 			}
 			this._cmd = process.cmd;
 			this.tooltip = process.cmd;
-			this.label = process.load && process.mem ? `${process.name} (${process.load}, ${process.mem})` : process.name;
+
+			if (process.load) {
+				this._load = process.load;
+			}
+			if (this._load && process.mem) {
+				this.label = `${process.name} (${this._load}, ${process.mem})`;
+			} else if (process.mem) {
+				this.label = `${process.name} (${process.mem})`;
+			} else {
+				this.label = process.name;
+			}
 		}
 		let changed = this.label !== oldLabel || this.tooltip !== oldTooltip;
 
@@ -267,25 +278,13 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 		if (!element) {
 			if (!this._root) {
 				const pid = parseInt(process.env['VSCODE_PID']);
-
-				setInterval(_ => {
-					listProcesses(pid).then(result => {
-						console.log(`duration: ${result.duration}`);
-						let processTreeItem = this._root.merge(result.root);
-						if (processTreeItem) {
-							// workaround for https://github.com/Microsoft/vscode/issues/40185
-							if (processTreeItem === this._root) {
-								processTreeItem = undefined;
-							}
-							this._onDidChangeTreeData.fire(processTreeItem);
-						}
-					});
-				}, POLL_INTERVAL);
-
 				this._root = new ProcessTreeItem(undefined, pid);
-				return listProcesses(pid).then(result => {
-					console.log(`duration: ${result.duration}`);
-					this._root.merge(result.root);
+
+				return listProcesses(pid, true).then(root => {
+					this.scheduleNextPoll(pid, 1);
+					this._root.merge(root);
+					return this._root.getChildren();
+				}).catch(err => {
 					return this._root.getChildren();
 				});
 			}
@@ -293,4 +292,24 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 		}
 		return element.getChildren();
 	}
+
+	private scheduleNextPoll(pid: number, cnt: number) {
+		setTimeout(_ => {
+			const start = Date.now();
+			listProcesses(pid, cnt % 4 === 0).then(root => {
+				console.log(`duration: ${Date.now() - start}`);
+				this.scheduleNextPoll(pid, cnt+1);
+				let processTreeItem = this._root.merge(root);
+				if (processTreeItem) {
+					// workaround for https://github.com/Microsoft/vscode/issues/40185
+					if (processTreeItem === this._root) {
+						processTreeItem = undefined;
+					}
+					this._onDidChangeTreeData.fire(processTreeItem);
+				}
+			}).catch(err => {
+				// if we do not call 'scheduleNextPoll', polling stops
+			});
+		}, POLL_INTERVAL);
+	} 
 }
