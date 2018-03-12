@@ -5,8 +5,9 @@
 
 'use strict';
 
-import { spawn, exec } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import { totalmem } from 'os';
+import { exists } from 'fs';
 
 export interface ProcessItem {
 	name: string;
@@ -19,7 +20,7 @@ export interface ProcessItem {
 	children?: ProcessItem[];
 }
 
-export function listProcesses(rootPid: number): Promise<ProcessItem> {
+export function listProcesses(rootPid: number): Promise<{ root: ProcessItem, duration: number }> {
 
 	return new Promise((resolve, reject) => {
 
@@ -131,68 +132,96 @@ export function listProcesses(rootPid: number): Promise<ProcessItem> {
 			return cmd;
 		}
 
+		// returns a function that aggregates chunks of data until one or more complete lines are received and passes them to a callback.
+		function lines(callback: (a: string) => void) {
+			let unfinished = '';	// unfinished last line of chunk
+			return (data: string | Buffer) => {
+				const lines = data.toString().split(/\r?\n/);
+				const finishedLines = lines.slice(0, lines.length - 1);
+				finishedLines[0] = unfinished + finishedLines[0]; // complete previous unfinished line
+				unfinished = lines[lines.length - 1]; // remember unfinished last line of this chunk for next round
+				for (const s of finishedLines) {
+					callback(s);
+				}
+			}
+		}
+
+		const starttime = Date.now();
+
+		let proc: ChildProcess;
+
 		if (process.platform === 'win32') {
 
-			const CMD = 'wmic process get CommandLine,ParentProcessId,ProcessId,WorkingSetSize && wmic path win32_perfformatteddata_perfproc_process where (PercentProcessorTime ^> 0) get IDProcess,PercentProcessorTime';
 			const CMD_PAT1 = /^(.+)\s+([0-9]+)\s+([0-9]+)\s+([0-9]+)$/;
 			const CMD_PAT2 = /^([0-9]+)\s+([0-9]+)$/;
 
-			const cmd = exec(CMD, { maxBuffer: 1000 * 1024 }, (err, stdout, stderr) => {
+			const CMD = 'wmic process get CommandLine,ParentProcessId,ProcessId,WorkingSetSize && wmic path win32_perfformatteddata_perfproc_process where (PercentProcessorTime ^> 0) get IDProcess,PercentProcessorTime';
 
-				if (err || stderr) {
-					reject(stderr);
+			proc = spawn(CMD, undefined, { shell: true } );
+
+			proc.stdout.setEncoding('utf8');
+			proc.stdout.on('data', lines(line => {
+				line = line.trim();
+				let matches = CMD_PAT1.exec(line);
+				if (matches && matches.length === 5) {
+					const mem = parseInt(matches[4])/1024/1024;
+					addToTree(parseInt(matches[3]), parseInt(matches[2]), matches[1].trim(), '0%', mem.toFixed(2)+'MB');
 				} else {
-
-					const lines = stdout.split('\r\n');
-					for (let line of lines) {
-						line = line.trim();
-						let matches = CMD_PAT1.exec(line);
-						if (matches && matches.length === 5) {
-							const mem = parseInt(matches[4])/1024/1024;
-							addToTree(parseInt(matches[3]), parseInt(matches[2]), matches[1].trim(), '0%', mem.toFixed(2)+'MB');
-						} else {
-							matches = CMD_PAT2.exec(line);
-							if (matches && matches.length === 3) {
-								const pid = parseInt(matches[1]);
-								const process = map.get(pid);
-								if (process) {
-									process.load = matches[2] + '%';
-								}
-							}
+					matches = CMD_PAT2.exec(line);
+					if (matches && matches.length === 3) {
+						const pid = parseInt(matches[1]);
+						const process = map.get(pid);
+						if (process) {
+							process.load = matches[2] + '%';
 						}
 					}
-
-					resolve(rootItem);
 				}
-			});
+			}));
+			
 		} else {	// OS X & Linux
 
-			const CMD = 'ps -ax -o pid=,ppid=,pcpu=,pmem=,command=';
 			const CMD_PAT = /^\s*([0-9]+)\s+([0-9]+)\s+([0-9]+\.[0-9]+)\s+([0-9]+\.[0-9]+)\s+(.+)$/;
 
 			const TOTAL_MB = totalmem() / 1024 / 1024;
 
-			const p = exec(CMD, { maxBuffer: 1000 * 1024 }, (err, stdout, stderr) => {
+			proc = spawn('/bin/ps', [ '-ax', '-o', 'pid=,ppid=,pcpu=,pmem=,command=' ]);
 
-				if (err || stderr) {
-					reject(err || stderr.toString());
-				} else {
-
-					const lines = stdout.toString().split('\n');
-					for (const line of lines) {
-						let matches = CMD_PAT.exec(line.trim());
-						if (matches && matches.length === 6) {
-							const mb = TOTAL_MB / 100 * parseFloat(matches[4]);
-							const pid = parseInt(matches[1]);
-							//if (pid !== p.pid) {
-								addToTree(pid, parseInt(matches[2]), matches[5], matches[3]+'%', mb.toFixed(2)+'MB');
-							//}
-						}
-					}
-
-					resolve(rootItem);
+			proc.stdout.setEncoding('utf8');
+			proc.stdout.on('data', lines(line => {
+				let matches = CMD_PAT.exec(line.trim());
+				if (matches && matches.length === 6) {
+					const mb = TOTAL_MB / 100 * parseFloat(matches[4]);
+					const pid = parseInt(matches[1]);
+					//if (pid !== p.pid) {
+						addToTree(pid, parseInt(matches[2]), matches[5], matches[3]+'%', mb.toFixed(2)+'MB');
+					//}
 				}
-			});
+			}));
 		}
+
+		proc.on('error', (err) => {
+			reject(err.message);
+		});
+
+		proc.stderr.setEncoding('utf8');
+		proc.stderr.on('data', data => {
+			reject(data.toString());
+		});
+
+		proc.on('close', (n) => {
+			resolve({ root: rootItem, duration: Date.now() - starttime });
+		});
+
+		proc.on('exit', (code, signal) => {
+			if (code === 0) {
+				//resolve(rootItem);
+			} else if (code > 0) {
+				reject(`process terminated with exit code: ${code}`);
+			}
+			if (signal) {
+				reject(`process terminated with signal: ${signal}`);
+			}
+		});
+
 	});
 }

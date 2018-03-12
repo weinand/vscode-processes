@@ -20,14 +20,14 @@ const KEEP_TERMINATED = false;
 const DEBUG_FLAGS_PATTERN = /\s--(inspect|debug)(-(brk|port))?(=\d+)?/;
 const DEBUG_PORT_PATTERN = /\s--(inspect|debug)-port=(\d+)/;
 
-let processViewer: ProcessProvider;
+let processViewer: vscode.TreeView<ProcessTreeItem>;
+let newItem: ProcessTreeItem;
 
 export function activate(context: vscode.ExtensionContext) {
 
 	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.showProcessView', () => {
 		if (!processViewer) {
-			processViewer = new ProcessProvider(context);
-			vscode.window.registerTreeDataProvider('extension.vscode-processes.processViewer', processViewer);
+			processViewer = vscode.window.registerTreeDataProvider('extension.vscode-processes.processViewer', new ProcessProvider(context));
 		}
 		vscode.commands.executeCommand('setContext', 'extension.vscode-processes.processViewerContext', true)
 	}));
@@ -41,9 +41,16 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.kill', (item: ProcessTreeItem) => {
+		if (newItem) {
+			processViewer.reveal(newItem);
+			processViewer.reveal(newItem);
+		}
+
+/*
 		if (item._pid) {
 			process.kill(item._pid, 'SIGTERM');
 		}
+*/
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.forceKill', (item: ProcessTreeItem) => {
@@ -89,12 +96,14 @@ function attachTo(item: ProcessTreeItem) {
 
 class ProcessTreeItem extends TreeItem {
 
+	_parent: ProcessTreeItem;
 	_pid: number;
 	_cmd: string;
 	_children: ProcessTreeItem[];
 
-	constructor(pid: number) {
+	constructor(parent: ProcessTreeItem, pid: number) {
 		super('', vscode.TreeItemCollapsibleState.None);
+		this._parent = parent;
 		this._pid = pid;
 	}
 
@@ -112,6 +121,10 @@ class ProcessTreeItem extends TreeItem {
 	 */
 	merge(process: ProcessItem): ProcessTreeItem {
 
+		if (!process) {
+			return undefined;
+		}
+
 		// update item's name
 		const oldLabel = this.label;
 		const oldTooltip = this.tooltip;
@@ -121,6 +134,9 @@ class ProcessTreeItem extends TreeItem {
 				this.label = `[[ ${this.label} ]]`;
 			}
 		} else {
+			if (process.cmd.indexOf('sleep ') >= 0) {
+				newItem = this;
+			}
 			this._cmd = process.cmd;
 			this.tooltip = process.cmd;
 			this.label = process.load && process.mem ? `${process.name} (${process.load}, ${process.mem})` : process.name;
@@ -140,7 +156,7 @@ class ProcessTreeItem extends TreeItem {
 			for (const child of process.children) {
 				let found = this._children ? this._children.find(c => child.pid === c._pid) : undefined;
 				if (!found) {
-					found = new ProcessTreeItem(child.pid);
+					found = new ProcessTreeItem(this, child.pid);
 					changed = true;
 				}
 				const changedChild = found.merge(child);
@@ -242,6 +258,10 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 		return processTreeItem;
 	}
 
+	getParent(element: ProcessTreeItem): ProcessTreeItem {
+		return element._parent;
+	}
+
 	getChildren(element?: ProcessTreeItem): vscode.ProviderResult<ProcessTreeItem[]> {
 
 		if (!element) {
@@ -249,8 +269,9 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 				const pid = parseInt(process.env['VSCODE_PID']);
 
 				setInterval(_ => {
-					listProcesses(pid).then(process => {
-						let processTreeItem = this._root.merge(process);
+					listProcesses(pid).then(result => {
+						console.log(`duration: ${result.duration}`);
+						let processTreeItem = this._root.merge(result.root);
 						if (processTreeItem) {
 							// workaround for https://github.com/Microsoft/vscode/issues/40185
 							if (processTreeItem === this._root) {
@@ -261,9 +282,10 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 					});
 				}, POLL_INTERVAL);
 
-				this._root = new ProcessTreeItem(pid);
-				return listProcesses(pid).then(process => {
-					this._root.merge(process);
+				this._root = new ProcessTreeItem(undefined, pid);
+				return listProcesses(pid).then(result => {
+					console.log(`duration: ${result.duration}`);
+					this._root.merge(result.root);
 					return this._root.getChildren();
 				});
 			}
