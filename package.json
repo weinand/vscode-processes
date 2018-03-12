@@ -10,9 +10,10 @@
 	},
 	"license": "MIT",
 	"engines": {
-		"vscode": "^1.19.0",
+		"vscode": "^1.21.0",
 		"node": "^7.9.0"
 	},
+	"enableProposedApi": true,
 	"categories": [
 		"Debuggers"
 	],
