@@ -14,7 +14,7 @@ import { setInterval, setTimeout } from 'timers';
 
 const localize = nls.loadMessageBundle();
 
-const POLL_INTERVAL = 2000;
+const POLL_INTERVAL = 1000;
 const KEEP_TERMINATED = false;
 
 const DEBUG_FLAGS_PATTERN = /\s--(inspect|debug)(-(brk|port))?(=\d+)?/;
@@ -297,7 +297,7 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 		setTimeout(_ => {
 			const start = Date.now();
 			listProcesses(pid, cnt % 4 === 0).then(root => {
-				console.log(`duration: ${Date.now() - start}`);
+				// sconsole.log(`duration: ${Date.now() - start}`);
 				this.scheduleNextPoll(pid, cnt+1);
 				let processTreeItem = this._root.merge(root);
 				if (processTreeItem) {
@@ -311,5 +311,5 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 				// if we do not call 'scheduleNextPoll', polling stops
 			});
 		}, POLL_INTERVAL);
-	} 
+	}
 }
