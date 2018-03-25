@@ -297,7 +297,7 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 		setTimeout(_ => {
 			const start = Date.now();
 			listProcesses(pid, cnt % 4 === 0).then(root => {
-				// sconsole.log(`duration: ${Date.now() - start}`);
+				// console.log(`duration: ${Date.now() - start}`);
 				this.scheduleNextPoll(pid, cnt+1);
 				let processTreeItem = this._root.merge(root);
 				if (processTreeItem) {
