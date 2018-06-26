@@ -10,7 +10,7 @@
 	},
 	"license": "MIT",
 	"engines": {
-		"vscode": "^1.21.0",
+		"vscode": "^1.25.0",
 		"node": "^7.9.0"
 	},
 	"enableProposedApi": true,
@@ -25,14 +25,14 @@
 		"url": "https://github.com/weinand/vscode-processes/issues"
 	},
 	"dependencies": {
-		"vscode-nls": "3.2.1"
+		"vscode-nls": "3.2.2"
 	},
 	"devDependencies": {
-		"typescript": "^2.7.2",
-		"vscode": "^1.1.10",
+		"typescript": "^2.9.2",
+		"vscode": "^1.1.18",
 		"@types/node": "^9.4.6",
 		"@types/mocha": "^2.2.48",
-		"vsce": "^1.37.1"
+		"vsce": "^1.43.0"
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",

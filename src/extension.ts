@@ -5,14 +5,8 @@
 'use strict';
 
 import * as vscode from 'vscode';
-import { spawn, exec } from 'child_process';
-import { basename } from 'path';
-import * as nls from 'vscode-nls';
 import { listProcesses, ProcessItem } from './ps';
 import { TreeDataProvider, TreeItem, EventEmitter, Event, ProviderResult } from 'vscode';
-import { setInterval, setTimeout } from 'timers';
-
-const localize = nls.loadMessageBundle();
 
 const POLL_INTERVAL = 1000;
 const KEEP_TERMINATED = false;
@@ -21,13 +15,20 @@ const DEBUG_FLAGS_PATTERN = /\s--(inspect|debug)(-(brk|port))?(=\d+)?/;
 const DEBUG_PORT_PATTERN = /\s--(inspect|debug)-port=(\d+)/;
 
 let processViewer: vscode.TreeView<ProcessTreeItem>;
-let newItem: ProcessTreeItem;
 
 export function activate(context: vscode.ExtensionContext) {
 
+
 	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.showProcessView', () => {
 		if (!processViewer) {
-			processViewer = vscode.window.registerTreeDataProvider('extension.vscode-processes.processViewer', new ProcessProvider(context));
+			const pid = parseInt(process.env['VSCODE_PID']);
+			const provider = new ProcessProvider(pid);
+			processViewer = vscode.window.createTreeView('extension.vscode-processes.processViewer', { treeDataProvider: provider });
+			processViewer.onDidChangeVisibility(e => {
+				if (e.visible) {
+					provider.scheduleNextPoll();
+				}
+			});
 		}
 		vscode.commands.executeCommand('setContext', 'extension.vscode-processes.processViewerContext', true)
 	}));
@@ -41,16 +42,9 @@ export function activate(context: vscode.ExtensionContext) {
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.kill', (item: ProcessTreeItem) => {
-		if (newItem) {
-			processViewer.reveal(newItem);
-			processViewer.reveal(newItem);
-		}
-
-/*
 		if (item._pid) {
 			process.kill(item._pid, 'SIGTERM');
 		}
-*/
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('extension.vscode-processes.forceKill', (item: ProcessTreeItem) => {
@@ -120,7 +114,7 @@ class ProcessTreeItem extends TreeItem {
 	 * Update this item with the information from the given ProcessItem.
 	 * Returns the elementId of the subtree that needs to be refreshed or undefined if nothing has changed.
 	 */
-	merge(process: ProcessItem): ProcessTreeItem {
+	merge(process: ProcessItem, newItems?: ProcessTreeItem[]): ProcessTreeItem {
 
 		if (!process) {
 			return undefined;
@@ -135,9 +129,6 @@ class ProcessTreeItem extends TreeItem {
 				this.label = `[[ ${this.label} ]]`;
 			}
 		} else {
-			if (process.cmd.indexOf('sleep ') >= 0) {
-				newItem = this;
-			}
 			this._cmd = process.cmd;
 			this.tooltip = process.cmd;
 
@@ -168,9 +159,12 @@ class ProcessTreeItem extends TreeItem {
 				let found = this._children ? this._children.find(c => child.pid === c._pid) : undefined;
 				if (!found) {
 					found = new ProcessTreeItem(this, child.pid);
+					if (newItems) {
+						newItems.push(found);
+					}
 					changed = true;
 				}
-				const changedChild = found.merge(child);
+				const changedChild = found.merge(child, newItems);
 				if (changedChild) {
 					childChanges.push(changedChild);
 				}
@@ -183,7 +177,7 @@ class ProcessTreeItem extends TreeItem {
 					if (!found) {
 						changed = true;
 						if (KEEP_TERMINATED) {
-							child.merge(null);
+							child.merge(null, newItems);
 							nextChildren.push(child);
 						}
 					}
@@ -261,8 +255,7 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 	private _onDidChangeTreeData: EventEmitter<ProcessTreeItem> = new EventEmitter<ProcessTreeItem>();
 	readonly onDidChangeTreeData: Event<ProcessTreeItem> = this._onDidChangeTreeData.event;
 
-	constructor(context: vscode.ExtensionContext) {
-		// everything is lazy
+	constructor(private _pid: number) {
 	}
 
 	getTreeItem(processTreeItem: ProcessTreeItem): ProcessTreeItem | Thenable<ProcessTreeItem> {
@@ -277,11 +270,10 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 
 		if (!element) {
 			if (!this._root) {
-				const pid = parseInt(process.env['VSCODE_PID']);
-				this._root = new ProcessTreeItem(undefined, pid);
+				this._root = new ProcessTreeItem(undefined, this._pid);
 
-				return listProcesses(pid, true).then(root => {
-					this.scheduleNextPoll(pid, 1);
+				return listProcesses(this._pid, true).then(root => {
+					this.scheduleNextPoll(1);
 					this._root.merge(root);
 					return this._root.getChildren();
 				}).catch(err => {
@@ -293,19 +285,32 @@ export class ProcessProvider implements TreeDataProvider<ProcessTreeItem> {
 		return element.getChildren();
 	}
 
-	private scheduleNextPoll(pid: number, cnt: number) {
+	scheduleNextPoll(cnt: number = 1) {
 		setTimeout(_ => {
 			const start = Date.now();
-			listProcesses(pid, cnt % 4 === 0).then(root => {
+			listProcesses(this._pid, cnt % 4 === 0).then(root => {
 				// console.log(`duration: ${Date.now() - start}`);
-				this.scheduleNextPoll(pid, cnt+1);
-				let processTreeItem = this._root.merge(root);
+				if (processViewer.visible) {
+					// schedule next poll only if still visible
+					this.scheduleNextPoll(cnt+1);
+				}
+				const newItems: ProcessTreeItem[] = [];
+				let processTreeItem = this._root.merge(root, newItems);
 				if (processTreeItem) {
 					// workaround for https://github.com/Microsoft/vscode/issues/40185
 					if (processTreeItem === this._root) {
 						processTreeItem = undefined;
 					}
 					this._onDidChangeTreeData.fire(processTreeItem);
+					if (newItems.length > 0 && processViewer.visible) {
+						for (const newItem of newItems) {
+							processViewer.reveal(newItem, { select: false } ).then(() => {
+								// ok
+							}, error => {
+								//console.log(error + ': ' + newItem.label);
+							});
+						}
+					}
 				}
 			}).catch(err => {
 				// if we do not call 'scheduleNextPoll', polling stops
