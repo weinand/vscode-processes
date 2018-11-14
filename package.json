@@ -2,7 +2,7 @@
 	"name": "vscode-processes",
 	"displayName": "VS Code Processes",
 	"description": "Provide access to all VS Code processes",
-	"version": "0.0.5",
+	"version": "0.0.6",
 	"publisher": "andreweinand",
 	"author": {
 		"name": "Microsoft Corporation",
@@ -10,10 +10,9 @@
 	},
 	"license": "MIT",
 	"engines": {
-		"vscode": "^1.25.0",
-		"node": "^7.9.0"
+		"vscode": "^1.29.0",
+		"node": "^8.9.3"
 	},
-	"enableProposedApi": true,
 	"categories": [
 		"Debuggers"
 	],
@@ -25,14 +24,14 @@
 		"url": "https://github.com/weinand/vscode-processes/issues"
 	},
 	"dependencies": {
-		"vscode-nls": "3.2.2"
+		"vscode-nls": "4.0.0"
 	},
 	"devDependencies": {
-		"typescript": "^2.9.2",
-		"vscode": "^1.1.18",
-		"@types/node": "^9.4.6",
-		"@types/mocha": "^2.2.48",
-		"vsce": "^1.43.0"
+		"typescript": "^3.1.6",
+		"vscode": "^1.1.21",
+		"@types/node": "^8.9.3",
+		"@types/mocha": "^5.2.5",
+		"vsce": "^1.53.0"
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
